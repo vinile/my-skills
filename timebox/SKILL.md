@@ -1,6 +1,6 @@
 ---
 name: openclaw-timebox-cpr
-description: 使用时间盒（Timebox）+ CPR 工作法管理 OpenClaw 任务的完整执行周期。流程：Context 锚定 → Align 对齐优先级 → Plan+Run 执行 → Review 复盘。自动写入本地日志，可选接入 macOS 日历。触发词："时间盒"、"timebox"、"CPR 复盘"、"开始一个任务"、"帮我规划任务"、"用 timebox"、"start timebox"、"task planning"。
+description: 基于潘农菲翻译的《时间盒》与《CPR工作法》，为 OpenClaw 打造的全天任务执行系统。早晨用一段对话规划全天、讨论优先级、锁定时间盒；执行时 AI 完全不打扰；每盒结束做 30 秒快速收集；全天结束用 CPR（Completed / Problem / Roadmap）结构复盘。日志本地完整留存，每日总结自动同步到 Flomo、Notion 等工具。支持苹果日历、飞书、Google 日历自动占位。触发词："时间盒"、"timebox"、"CPR 复盘"、"开始今天的规划"、"帮我规划任务"、"start timebox"、"task planning"。
 version: 2.3.0
 metadata:
   author: vincent

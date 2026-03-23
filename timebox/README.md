@@ -1,20 +1,44 @@
 # openclaw-timebox-cpr
 
-使用时间盒（Timebox）+ CPR 工作法管理 OpenClaw 任务的完整执行周期。
+> 基于潘农菲翻译的《时间盒》与《CPR 工作法》，为 OpenClaw 打造的全天任务执行系统。
 
-## 功能
+你有没有过这样的感受：每天忙完一天，却说不清楚做了什么、卡在哪里、明天该从哪里继续？
 
-- 全天任务规划：收集任务 → 讨论优先级 → 分配时间盒
-- 执行追踪：时间盒启动/结束记录，AI 不干预执行过程
-- 快速收集：每个时间盒结束后一次性收集结果
-- 全天复盘：CPR（Completed / Problem / Roadmap）结构化复盘
-- 多平台日历集成：苹果日历、飞书、企业微信、Google 日历
-- 多平台日志集成：本地 Markdown、飞书文档、Notion、Flomo 等
+这个 Skill 把两套经过验证的工作方法带进你的 AI 工作流：**时间盒**让你把每件事关进固定时长的"盒子"，强制聚焦；**CPR 工作法**让你每天结束时用三个维度复盘——完成了什么、遇到什么问题、下一步怎么走。
+
+## 工作方式
+
+```
+早晨规划 → 逐盒执行 → 快速收集 → 全天复盘
+```
+
+- **PLAN**：一段对话收集全天任务，AI 帮你讨论优先级、锁定执行顺序和时间盒时长
+- **RUN**：启动时间盒后 AI 完全沉默，不打扰、不催促，专注时间归你自己
+- **CHECK**：每盒结束 30 秒收集——完成了吗？卡在哪？有新任务吗？
+- **REVIEW**：全天结束，AI 基于完整记录生成 CPR 复盘报告
+
+## 核心特性
+
+- 📅 **多平台日历自动占位**：苹果日历、飞书日历、Google 日历、企业微信日历
+- 📝 **本地日志完整留存**：规划 + 执行记录 + 每日总结 + CPR 复盘
+- 🔁 **每日总结自动同步**：REVIEW 完成后推送摘要到 Flomo、Notion、飞书文档等，不产生噪音
+- 🌐 **多语言支持**：中文 / English
 
 ## 安装
 
-将 `SKILL.md` 复制到 `.codebuddy/skills/openclaw-timebox-cpr/SKILL.md`
+```bash
+# 通过 clawhub CLI 安装
+npx clawhub@latest install openclaw-timebox-cpr
+```
+
+或手动将 `SKILL.md` 复制到 `.codebuddy/skills/openclaw-timebox-cpr/SKILL.md`
 
 ## 触发词
 
-"时间盒"、"timebox"、"CPR 复盘"、"开始今天的规划"、"帮我规划任务"
+"时间盒"、"timebox"、"CPR 复盘"、"开始今天的规划"、"帮我规划任务"、"start timebox"
+
+## 参考来源
+
+本 Skill 的工作法理念源自潘农菲翻译的两本书：
+- 《时间盒》（Timeboxing）
+- 《CPR 工作法》
