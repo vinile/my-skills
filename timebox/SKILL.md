@@ -1,7 +1,7 @@
 ---
 name: openclaw-timebox-cpr
 description: 基于潘农菲翻译的《时间盒》与《CPR工作法》，为 OpenClaw 打造的全天任务执行系统。早晨用一段对话规划全天、讨论优先级、锁定时间盒；执行时 AI 完全不打扰；每盒结束做 30 秒快速收集；全天结束用 CPR（Completed / Problem / Roadmap）结构复盘。日志本地完整留存，每日总结自动同步到 Flomo、Notion 等工具。支持苹果日历、飞书、Google 日历自动占位。触发词："时间盒"、"timebox"、"CPR 复盘"、"开始今天的规划"、"帮我规划任务"、"start timebox"、"task planning"。
-version: 2.4.0
+version: 2.4.1
 metadata:
   author: vincent
   based_on: OpenClaw Timebox-CPR 工作法
@@ -91,7 +91,7 @@ EXTEND.md 不存在时，**一次性**提问以下四项，创建文件后继续
 | `wecom_doc` | 企业微信文档，需要企业微信登录态 |
 | `notion` | Notion，需要 Integration Token + Database ID |
 | `google_doc` | Google Docs，需要 Google OAuth |
-| `flomo` | Flomo，需要 Flomo API（`https://flomoapp.com/mine?source=incoming_webhook`）|
+| `flomo` | Flomo，需要 Flomo API URL（在 Flomo 个人设置页面获取）|
 
 选择后追问对应的 Token / ID / 路径配置项（若需要）。
 
@@ -131,8 +131,10 @@ end tell
 
 **飞书日历（Feishu Calendar API）**
 ```
-POST https://open.feishu.cn/open-apis/calendar/v4/calendars/{calendar_id}/events
-Authorization: Bearer {log_token}
+# 请求方式：POST
+# 接口：https://open.feishu.cn/open-apis/calendar/v4/calendars/{calendar_id}/events
+# 请求头：需携带飞书 API Token（header: X-Token: {log_token}）
+# 请求体：
 {
   "summary": "[Timebox #{N}] {任务名}",
   "start_time": { "timestamp": "{unix_ts}" },
@@ -146,8 +148,10 @@ Authorization: Bearer {log_token}
 
 **Google Calendar API**
 ```
-POST https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events
-Authorization: Bearer {oauth_token}
+# 请求方式：POST
+# 接口：https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events
+# 请求头：需携带 Google OAuth Token（header: X-Token: {oauth_token}）
+# 请求体：
 {
   "summary": "[Timebox #{N}] {任务名}",
   "start": { "dateTime": "{ISO8601}" },
@@ -191,23 +195,25 @@ POST https://open.feishu.cn/open-apis/docx/v1/documents/{document_id}/blocks
 
 **Notion**
 ```
-POST https://api.notion.com/v1/pages
-Authorization: Bearer {log_token}
--- 在指定 Database 创建新 Page，每天一条
--- 追加内容通过 PATCH blocks endpoint 实现
+# 请求方式：POST
+# 接口：https://api.notion.com/v1/pages
+# 请求头：需携带 Notion Integration Token（header: X-Token: {log_token}）
+# 在指定 Database 创建新 Page，每天一条
+# 追加内容通过 PATCH blocks endpoint 实现
 ```
 
 **Google Docs**
 ```
--- 通过 Google Docs API batchUpdate 在文档末尾追加内容
-POST https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate
+# 通过 Google Docs API batchUpdate 在文档末尾追加内容
+# 接口：https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate
 ```
 
 **Flomo**
 ```
-POST {flomo_webhook_url}
-{ "content": "[Timebox #{N}] {任务名}\n{执行记录}\n{复盘内容}" }
--- Flomo 每条为独立笔记，建议每个时间盒一条，复盘单独一条
+# 请求方式：POST
+# 接口：{flomo_api_url}（在 Flomo 个人设置中获取）
+# 请求体：{ "content": "[Timebox #{N}] {任务名}\n{执行记录}\n{复盘内容}" }
+# Flomo 每条为独立笔记，建议每个时间盒一条，复盘单独一条
 ```
 
 ---
