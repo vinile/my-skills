@@ -1,7 +1,7 @@
 ---
 name: openclaw-timebox-cpr
-description: 基于潘农菲翻译的《时间盒》，为 OpenClaw 打造的全天任务执行系统。早晨用一段对话规划全天、讨论优先级、锁定时间盒；执行时 AI 完全不打扰；每盒结束做 30 秒快速收集；全天结束生成每日总结并自动同步到 Flomo、Notion 等工具。支持苹果日历、飞书、Google 日历自动占位。触发词："时间盒"、"timebox"、"开始今天的规划"、"帮我规划任务"、"start timebox"、"task planning"。
-version: 2.5.0
+description: 基于潘农菲翻译的《时间盒》，为 OpenClaw 打造的全天任务执行系统。早晨用一段对话规划全天、讨论优先级、锁定时间盒；执行时 AI 完全不打扰；每盒结束做 30 秒快速收集；全天结束生成每日总结并自动同步到 Flomo、Notion 等工具。支持苹果日历、飞书、Google 日历自动占位，以及将时间盒任务双向同步到滴答清单（TickTick）。触发词："时间盒"、"timebox"、"开始今天的规划"、"帮我规划任务"、"start timebox"、"task planning"。
+version: 2.6.0
 metadata:
   author: vincent
   based_on: OpenClaw Timebox 工作法
@@ -48,6 +48,9 @@ log_backend: local           # 日志工具（见支持列表）
 log_dir: ~/.openclaw/logs    # 仅 local 模式使用
 log_token:                   # 第三方日志工具的 Token/Key（如需要）
 log_workspace:               # 第三方日志工具的空间/数据库 ID（如需要）
+task_sync: none              # 任务同步工具：ticktick | none
+ticktick_token_file: ~/.config/timebox/ticktick.json  # TickTick token 文件路径
+ticktick_project_id:         # 同步到哪个清单（留空则用收件箱）
 lang: zh                     # zh | en
 runtime: codebuddy           # 运行环境：codebuddy | openclaw
                              # openclaw 模式下会注册 cron 在时间盒结束时主动发起 CHECK
@@ -80,7 +83,73 @@ EXTEND.md 不存在时，**一次性**提问以下四项，创建文件后继续
 - 若 `macos`：使用哪个日历名称？（默认"工作"，不存在则用默认日历）
 - 若 `feishu` / `google` / `wecom`：需要提供对应 Token 或引导完成授权
 
-### 问题 3：日志工具
+### 问题 3：任务同步到滴答清单（TickTick）
+
+> 是否将每个时间盒任务自动同步到滴答清单？规划时创建任务，完成时标记勾选。
+
+| 选项 | 说明 |
+|------|------|
+| `ticktick` | 同步到滴答清单，需要完成一次 OAuth 授权 |
+| `none` | 不同步（默认）|
+
+若选择 `ticktick`：
+
+**Step 1：检查 token 文件**
+
+AI 执行以下命令检查 token 是否已存在且有效：
+
+```bash
+python3 -c "
+import json, urllib.request, sys
+try:
+    token = json.load(open('$HOME/.config/timebox/ticktick.json'))
+    req = urllib.request.Request('https://api.ticktick.com/open/v1/project')
+    req.add_header('Authorization', f'Bearer {token[\"access_token\"]}')
+    urllib.request.urlopen(req)
+    print('ok')
+except Exception as e:
+    print('fail:', e)
+"
+```
+
+- 若输出 `ok`：直接进入 Step 3
+- 若输出 `fail` 或文件不存在：进入 Step 2
+
+**Step 2：引导首次授权**
+
+AI 告知用户：
+
+> "需要完成一次 TickTick 授权（约 1 分钟），之后无需重复操作。
+> 请运行以下命令，浏览器会自动打开授权页，点击同意即可：
+>
+> ```bash
+> python3 ~/.config/timebox/ticktick_auth.py
+> ```
+>
+> 完成后告诉我，我们继续配置。"
+
+授权完成后，AI 重新执行 Step 1 验证。
+
+**Step 3：选择同步清单**
+
+> "要同步到哪个清单？（直接回车用收件箱，或输入清单名称）"
+
+AI 执行以下命令列出现有清单：
+
+```bash
+python3 -c "
+import json, urllib.request
+token = json.load(open('$HOME/.config/timebox/ticktick.json'))
+req = urllib.request.Request('https://api.ticktick.com/open/v1/project')
+req.add_header('Authorization', f'Bearer {token[\"access_token\"]}')
+data = json.loads(urllib.request.urlopen(req).read())
+for p in data: print(p['id'], p['name'])
+"
+```
+
+将清单 ID 写入 `ticktick_project_id`（留空则用收件箱 inbox）。
+
+### 问题 4：日志工具
 
 > 你用什么记录工作日志？每个时间盒的执行记录和复盘会自动写入。
 
@@ -95,7 +164,7 @@ EXTEND.md 不存在时，**一次性**提问以下四项，创建文件后继续
 
 选择后追问对应的 Token / ID / 路径配置项（若需要）。
 
-### 问题 4：交互语言
+### 问题 5：交互语言
 
 > 中文 / English
 
@@ -218,6 +287,135 @@ POST https://open.feishu.cn/open-apis/docx/v1/documents/{document_id}/blocks
 
 ---
 
+## 滴答清单（TickTick）集成
+
+> 仅当 `task_sync: ticktick` 时生效。
+
+### 通用行为
+
+- PLAN 阶段确认时间分配后，为每个时间盒**创建对应任务**
+- CHECK 阶段收集完毕后，**更新任务**（追加实际用时到 content）
+- REVIEW 完成后，将完成的时间盒任务**标记为已完成**（status: 2）
+- 未完成的时间盒任务保留在清单中（status 不变），便于次日处理
+- **任何 TickTick 操作失败，仅提示，不阻断主流程**
+
+### Token 读取
+
+每次调用前，AI 从 `ticktick_token_file` 读取 access_token：
+
+```python
+import json
+token_data = json.load(open(os.path.expanduser(ticktick_token_file)))
+access_token = token_data["access_token"]
+headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+```
+
+若读取失败或文件不存在，提示用户重新运行 `ticktick_auth.py`。
+
+### API Base URL
+
+```
+https://api.ticktick.com/open/v1
+```
+
+### 创建时间盒任务（PLAN 完成时）
+
+为每个时间盒调用一次，将返回的 `task_id` 存入当日日志供后续更新：
+
+```python
+# POST /task
+payload = {
+    "title": "[Timebox #{N}] {任务名}",
+    "content": "优先级：{priority} · 紧急程度：{urgency}\n计划时间：{HH:MM}，时长 {duration} 分钟",
+    "startDate": "{ISO8601_start}",    # 例如 "2026-03-25T09:00:00+0800"
+    "dueDate":   "{ISO8601_end}",      # 开始时间 + 时长
+    "priority":  {ticktick_priority},  # 见优先级映射
+    "projectId": "{ticktick_project_id 或留空用收件箱}",
+    "tags": ["timebox"]
+}
+# 优先级映射：高→3, 中→1, 低→0（TickTick: 0=none,1=low,3=medium,5=high）
+# 返回值中取 task["id"] 存入日志：[ticktick_id: {task_id}]
+```
+
+**日志记录格式（在执行记录中追加）：**
+```
+- [HH:MM] ⏱ 时间盒 #1 开始 · {任务名} [ticktick_id: abc123]
+```
+
+### 更新任务（CHECK 完成时）
+
+```python
+# POST /task/{taskId}
+payload = {
+    "id": "{task_id}",
+    "projectId": "{ticktick_project_id}",
+    "content": "原有 content\n\n── CHECK 结果 ──\n{结果：完成/部分完成/未完成}\n{一句话描述}\n实际用时：{N} 分钟（计划 {M} 分钟）"
+}
+```
+
+### 标记完成（REVIEW 完成时）
+
+对所有已完成的时间盒任务调用：
+
+```python
+# POST /task/{taskId}/complete
+# 无需 body，返回 200 即成功
+```
+
+### 授权脚本位置
+
+首次授权脚本存放在：`~/.config/timebox/ticktick_auth.py`
+
+脚本由 PLAN 初始化时自动写入（若不存在），内容如下：
+
+```python
+#!/usr/bin/env python3
+"""TickTick 一次性 OAuth 授权脚本 - 由 timebox skill 自动生成"""
+import http.server, webbrowser, json, urllib.parse, urllib.request, base64, threading
+from pathlib import Path
+
+CLIENT_ID     = "{user_client_id}"    # 用户在 developer.ticktick.com 注册的 App
+CLIENT_SECRET = "{user_client_secret}"
+REDIRECT_URI  = "http://localhost:8765/callback"
+TOKEN_FILE    = Path.home() / ".config" / "timebox" / "ticktick.json"
+AUTH_URL      = "https://ticktick.com/oauth/authorize"
+TOKEN_URL     = "https://ticktick.com/oauth/token"
+PORT          = 8765
+received_code = None
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        global received_code
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        if "code" in params:
+            received_code = params["code"][0]
+            self.send_response(200); self.send_header("Content-type","text/html;charset=utf-8"); self.end_headers()
+            self.wfile.write(b"<h2 style='font-family:sans-serif;padding:40px'>\xe2\x9c\x85 \xe6\x8e\x88\xe6\x9d\x83\xe6\x88\x90\xe5\x8a\x9f\uff01\xe5\x8f\xaf\xe4\xbb\xa5\xe5\x85\xb3\xe9\x97\xad\xe6\xad\xa4\xe9\xa1\xb5\xe9\x9d\xa2\xe3\x80\x82</h2>")
+        else:
+            self.send_response(400); self.end_headers()
+        threading.Thread(target=self.server.shutdown).start()
+    def log_message(self, *args): pass
+
+def main():
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    server = http.server.HTTPServer(("localhost", PORT), Handler)
+    params = urllib.parse.urlencode({"client_id":CLIENT_ID,"response_type":"code","redirect_uri":REDIRECT_URI,"scope":"tasks:write tasks:read"})
+    print("正在打开浏览器授权页..."); webbrowser.open(f"{AUTH_URL}?{params}")
+    print("等待授权完成（在浏览器中点击同意）..."); server.serve_forever()
+    if not received_code: print("❌ 未收到授权码"); return
+    cred = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
+    data = urllib.parse.urlencode({"grant_type":"authorization_code","code":received_code,"redirect_uri":REDIRECT_URI}).encode()
+    req = urllib.request.Request(TOKEN_URL, data=data, method="POST")
+    req.add_header("Authorization", f"Basic {cred}"); req.add_header("Content-Type","application/x-www-form-urlencoded")
+    token = json.loads(urllib.request.urlopen(req).read())
+    TOKEN_FILE.write_text(json.dumps(token, indent=2, ensure_ascii=False))
+    print(f"✅ 授权成功！Token 已保存到：{TOKEN_FILE}")
+
+if __name__ == "__main__": main()
+```
+
+---
+
 ## 完整工作流
 
 ---
@@ -300,6 +498,7 @@ AI 在这个阶段只做一件事：**逐条记录，不插话**。
 用户确认或调整后：
 - 写入今日日志
 - 根据 `calendar` 配置批量创建日历事件
+- 若 `task_sync: ticktick`：为每个时间盒调用 `POST /open/v1/task` 创建任务，将返回的 `task_id` 追加到日志执行记录中（格式：`[ticktick_id: {id}]`）
 
 ---
 
@@ -373,6 +572,7 @@ AI 用**一次性提问**收集结果：
 
 收到回复后，AI：
 - 将结果追加写入日志（含实际用时与计划用时对比）
+- 若 `task_sync: ticktick`：从日志中取出该时间盒的 `ticktick_id`，调用 `POST /open/v1/task/{id}` 更新任务 content，追加 CHECK 结果
 - 若有新任务，加入今日清单并提示是否调整后续顺序
 - 输出下一个时间盒启动提示：
 
@@ -424,6 +624,7 @@ AI 基于全天日志生成每日总结报告：
 复盘完成后：
 - 将报告写入今日日志
 - 更新 `index.md`（local 模式）或对应平台索引
+- 若 `task_sync: ticktick`：对所有**已完成**的时间盒任务调用 `POST /open/v1/task/{id}/complete`；未完成任务保留在清单（供次日处理）
 - 询问：**"是否把未完成任务带入明天的规划？"**
 
 ---
@@ -493,6 +694,8 @@ completed: {X}/{N}
 5. **REMIND 只发一次**：openclaw 模式下 cron 触发提醒后，5 分钟内无响应不再追发，等用户主动
 6. **CHECK 保持轻量**：单盒收集最多 1 轮对话，不展开分析
 7. **复盘才是深度分析的时机**：规律总结、原因分析统一放到全天 REVIEW
-8. **本地日志完整记录**：规划 + 每条执行记录 + 每日总结 + 全天复盘，全部写入本地
+8. **本地日志完整记录**：规划 + 每条执行记录（含 ticktick_id）+ 每日总结 + 全天复盘，全部写入本地
 9. **外部工具只同步摘要**：flomo、Notion 等外部工具仅在 REVIEW 完成后推送"每日总结 + 全天复盘"两段，不推送逐条执行记录
-10. **不阻断流程**：日历/日志写入失败、cron 注册失败等外部错误，提示后继续执行
+10. **不阻断流程**：日历/日志写入失败、cron 注册失败、TickTick API 调用失败等外部错误，提示后继续执行
+11. **TickTick 操作静默执行**：创建/更新/完成任务时不在对话中展开 API 细节，成功则简短提示（"✓ 已同步到滴答清单"），失败则提示错误并继续
+12. **TickTick task_id 持久化**：每个时间盒的 ticktick_id 必须写入本地日志，以保证 CHECK 和 REVIEW 阶段能定位到对应任务
