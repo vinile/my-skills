@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-TickTick / 滴答清单 一次性 OAuth 授权脚本
-支持国际版（ticktick.com）和中国版（dida365.com）
+TickTick 国际版 一次性 OAuth 授权脚本
+（中国版用户请使用 dida-cli：npm install -g @suibiji/dida-cli && dida auth login）
 
 使用方式：
-  国际版：python3 ticktick_auth.py
-  中国版：python3 ticktick_auth.py --china
+  python3 ticktick_auth.py
 
 授权完成后 token 保存到 ~/.config/timebox/ticktick.json
 """
 
-import http.server, webbrowser, json, urllib.parse, urllib.request, base64, threading, sys
+import http.server, webbrowser, json, urllib.parse, urllib.request, base64, threading
 from pathlib import Path
 
 CLIENT_ID     = "在这里填入你的 client_id"
@@ -18,17 +17,8 @@ CLIENT_SECRET = "在这里填入你的 client_secret"
 REDIRECT_URI  = "http://localhost:8765/callback"
 TOKEN_FILE    = Path.home() / ".config" / "timebox" / "ticktick.json"
 PORT          = 8765
-
-# 根据参数切换版本
-region = "china" if "--china" in sys.argv else "global"
-if region == "china":
-    AUTH_URL  = "https://dida365.com/oauth/authorize"
-    TOKEN_URL = "https://dida365.com/oauth/token"
-    print("模式：滴答清单中国版（dida365.com）")
-else:
-    AUTH_URL  = "https://ticktick.com/oauth/authorize"
-    TOKEN_URL = "https://ticktick.com/oauth/token"
-    print("模式：TickTick 国际版（ticktick.com）")
+AUTH_URL      = "https://ticktick.com/oauth/authorize"
+TOKEN_URL     = "https://ticktick.com/oauth/token"
 
 received_code = None
 
@@ -56,10 +46,8 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
 def main():
     TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    # 启动本地回调服务器
     server = http.server.HTTPServer(("localhost", PORT), CallbackHandler)
 
-    # 打开浏览器
     auth_params = urllib.parse.urlencode({
         "client_id":     CLIENT_ID,
         "response_type": "code",
@@ -80,7 +68,6 @@ def main():
 
     print("✓ 收到授权码，正在换取 Token...")
 
-    # 换取 token
     credentials = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
     token_data = urllib.parse.urlencode({
         "grant_type":   "authorization_code",
@@ -98,7 +85,6 @@ def main():
         print(f"❌ Token 换取失败：HTTP {e.code}\n{e.read().decode()}")
         return
 
-    # 保存 token
     TOKEN_FILE.write_text(json.dumps(token, indent=2, ensure_ascii=False))
     print(f"\n✅ 授权成功！Token 已保存到：{TOKEN_FILE}")
     print(f"   token_type  : {token.get('token_type', '?')}")
