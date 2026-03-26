@@ -1,7 +1,7 @@
 ---
 name: openclaw-timebox-cpr
 description: 基于潘农菲翻译的《时间盒》，为 OpenClaw 打造的全天任务执行系统。早晨用一段对话规划全天、讨论优先级、锁定时间盒；执行时 AI 完全不打扰；每盒结束做 30 秒快速收集；全天结束生成每日总结并自动同步到 Flomo、Notion 等工具。支持苹果日历、飞书、Google 日历自动占位，以及将时间盒任务双向同步到滴答清单（TickTick）。触发词："时间盒"、"timebox"、"开始今天的规划"、"帮我规划任务"、"start timebox"、"task planning"。
-version: 2.6.0
+version: 2.6.1
 metadata:
   author: vincent
   based_on: OpenClaw Timebox 工作法
@@ -48,8 +48,9 @@ log_backend: local           # 日志工具（见支持列表）
 log_dir: ~/.openclaw/logs    # 仅 local 模式使用
 log_token:                   # 第三方日志工具的 Token/Key（如需要）
 log_workspace:               # 第三方日志工具的空间/数据库 ID（如需要）
-task_sync: none              # 任务同步工具：ticktick | none
-ticktick_token_file: ~/.config/timebox/ticktick.json  # TickTick token 文件路径
+task_sync: none              # 任务同步工具：ticktick | dida365 | none
+ticktick_region: global      # global（ticktick.com）| china（dida365.com）
+ticktick_token_file: ~/.config/timebox/ticktick.json  # TickTick/滴答清单 token 文件路径
 ticktick_project_id:         # 同步到哪个清单（留空则用收件箱）
 lang: zh                     # zh | en
 runtime: codebuddy           # 运行环境：codebuddy | openclaw
@@ -89,21 +90,44 @@ EXTEND.md 不存在时，**一次性**提问以下四项，创建文件后继续
 
 | 选项 | 说明 |
 |------|------|
-| `ticktick` | 同步到滴答清单，需要完成一次 OAuth 授权 |
+| `ticktick` | 同步到 TickTick **国际版**（ticktick.com） |
+| `dida365` | 同步到滴答清单**中国版**（dida365.com） |
 | `none` | 不同步（默认）|
 
-若选择 `ticktick`：
+> ⚠️ **国际版与中国版账号完全独立，token 不互通**，请根据你的实际登录平台选择。
+
+若选择 `ticktick` 或 `dida365`，根据所选版本确定以下域名：
+
+| | 国际版（ticktick） | 中国版（dida365） |
+|--|--|--|
+| OAuth 授权页 | `ticktick.com/oauth/authorize` | `dida365.com/oauth/authorize` |
+| Token 换取 | `ticktick.com/oauth/token` | `dida365.com/oauth/token` |
+| API 接口 | `api.ticktick.com/open/v1` | `api.dida365.com/open/v1` |
 
 **Step 1：检查 token 文件**
 
-AI 执行以下命令检查 token 是否已存在且有效：
+AI 根据所选版本执行以下命令检查 token 是否已存在且有效：
 
 ```bash
+# 国际版（ticktick）
 python3 -c "
-import json, urllib.request, sys
+import json, urllib.request
 try:
     token = json.load(open('$HOME/.config/timebox/ticktick.json'))
     req = urllib.request.Request('https://api.ticktick.com/open/v1/project')
+    req.add_header('Authorization', f'Bearer {token[\"access_token\"]}')
+    urllib.request.urlopen(req)
+    print('ok')
+except Exception as e:
+    print('fail:', e)
+"
+
+# 中国版（dida365）
+python3 -c "
+import json, urllib.request
+try:
+    token = json.load(open('$HOME/.config/timebox/ticktick.json'))
+    req = urllib.request.Request('https://api.dida365.com/open/v1/project')
     req.add_header('Authorization', f'Bearer {token[\"access_token\"]}')
     urllib.request.urlopen(req)
     print('ok')
@@ -119,7 +143,7 @@ except Exception as e:
 
 AI 告知用户：
 
-> "需要完成一次 TickTick 授权（约 1 分钟），之后无需重复操作。
+> "需要完成一次授权（约 1 分钟），之后无需重复操作。
 > 请运行以下命令，浏览器会自动打开授权页，点击同意即可：
 >
 > ```bash
@@ -134,9 +158,10 @@ AI 告知用户：
 
 > "要同步到哪个清单？（直接回车用收件箱，或输入清单名称）"
 
-AI 执行以下命令列出现有清单：
+AI 根据版本执行对应命令列出清单：
 
 ```bash
+# 国际版
 python3 -c "
 import json, urllib.request
 token = json.load(open('$HOME/.config/timebox/ticktick.json'))
@@ -145,9 +170,19 @@ req.add_header('Authorization', f'Bearer {token[\"access_token\"]}')
 data = json.loads(urllib.request.urlopen(req).read())
 for p in data: print(p['id'], p['name'])
 "
+
+# 中国版
+python3 -c "
+import json, urllib.request
+token = json.load(open('$HOME/.config/timebox/ticktick.json'))
+req = urllib.request.Request('https://api.dida365.com/open/v1/project')
+req.add_header('Authorization', f'Bearer {token[\"access_token\"]}')
+data = json.loads(urllib.request.urlopen(req).read())
+for p in data: print(p['id'], p['name'])
+"
 ```
 
-将清单 ID 写入 `ticktick_project_id`（留空则用收件箱 inbox）。
+将清单 ID 写入 `ticktick_project_id`；`ticktick_region` 写入 `global`（国际版）或 `china`（中国版）。
 
 ### 问题 4：日志工具
 
@@ -287,9 +322,38 @@ POST https://open.feishu.cn/open-apis/docx/v1/documents/{document_id}/blocks
 
 ---
 
-## 滴答清单（TickTick）集成
+## 滴答清单（TickTick / 滴答清单）集成
 
-> 仅当 `task_sync: ticktick` 时生效。
+> 仅当 `task_sync: ticktick` 或 `task_sync: dida365` 时生效。
+
+### 国际版 vs 中国版
+
+| | 国际版 | 中国版 |
+|--|--|--|
+| `task_sync` 值 | `ticktick` | `dida365` |
+| `ticktick_region` 值 | `global` | `china` |
+| 登录入口 | ticktick.com | dida365.com |
+| OAuth 授权 | ticktick.com/oauth/authorize | dida365.com/oauth/authorize |
+| Token 换取 | ticktick.com/oauth/token | dida365.com/oauth/token |
+| API Base | api.ticktick.com/open/v1 | api.dida365.com/open/v1 |
+| App 注册 | developer.ticktick.com | developer.dida365.com |
+
+> **两个版本账号独立，token 不互通**。API 路径和参数完全相同，只有域名不同。
+
+### 运行时域名解析
+
+AI 根据 `ticktick_region` 在运行时确定实际使用的域名：
+
+```python
+if ticktick_region == 'china':
+    AUTH_URL  = "https://dida365.com/oauth/authorize"
+    TOKEN_URL = "https://dida365.com/oauth/token"
+    API_BASE  = "https://api.dida365.com/open/v1"
+else:  # global（默认）
+    AUTH_URL  = "https://ticktick.com/oauth/authorize"
+    TOKEN_URL = "https://ticktick.com/oauth/token"
+    API_BASE  = "https://api.ticktick.com/open/v1"
+```
 
 ### 通用行为
 
@@ -297,14 +361,14 @@ POST https://open.feishu.cn/open-apis/docx/v1/documents/{document_id}/blocks
 - CHECK 阶段收集完毕后，**更新任务**（追加实际用时到 content）
 - REVIEW 完成后，将完成的时间盒任务**标记为已完成**（status: 2）
 - 未完成的时间盒任务保留在清单中（status 不变），便于次日处理
-- **任何 TickTick 操作失败，仅提示，不阻断主流程**
+- **任何 TickTick/滴答清单操作失败，仅提示，不阻断主流程**
 
 ### Token 读取
 
 每次调用前，AI 从 `ticktick_token_file` 读取 access_token：
 
 ```python
-import json
+import json, os
 token_data = json.load(open(os.path.expanduser(ticktick_token_file)))
 access_token = token_data["access_token"]
 headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
@@ -312,75 +376,67 @@ headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "applicati
 
 若读取失败或文件不存在，提示用户重新运行 `ticktick_auth.py`。
 
-### API Base URL
-
-```
-https://api.ticktick.com/open/v1
-```
-
 ### 创建时间盒任务（PLAN 完成时）
 
-为每个时间盒调用一次，将返回的 `task_id` 存入当日日志供后续更新：
-
 ```python
-# POST /task
+# POST {API_BASE}/task
 payload = {
     "title": "[Timebox #{N}] {任务名}",
     "content": "优先级：{priority} · 紧急程度：{urgency}\n计划时间：{HH:MM}，时长 {duration} 分钟",
-    "startDate": "{ISO8601_start}",    # 例如 "2026-03-25T09:00:00+0800"
-    "dueDate":   "{ISO8601_end}",      # 开始时间 + 时长
-    "priority":  {ticktick_priority},  # 见优先级映射
-    "projectId": "{ticktick_project_id 或留空用收件箱}",
+    "startDate": "{ISO8601_start}",
+    "dueDate":   "{ISO8601_end}",
+    "priority":  {ticktick_priority},  # 高→3, 中→1, 低→0
+    "projectId": "{ticktick_project_id}",  # 留空用收件箱
     "tags": ["timebox"]
 }
-# 优先级映射：高→3, 中→1, 低→0（TickTick: 0=none,1=low,3=medium,5=high）
-# 返回值中取 task["id"] 存入日志：[ticktick_id: {task_id}]
-```
-
-**日志记录格式（在执行记录中追加）：**
-```
-- [HH:MM] ⏱ 时间盒 #1 开始 · {任务名} [ticktick_id: abc123]
+# 返回值取 task["id"] 存入日志：[ticktick_id: {task_id}]
 ```
 
 ### 更新任务（CHECK 完成时）
 
 ```python
-# POST /task/{taskId}
+# POST {API_BASE}/task/{taskId}
 payload = {
     "id": "{task_id}",
     "projectId": "{ticktick_project_id}",
-    "content": "原有 content\n\n── CHECK 结果 ──\n{结果：完成/部分完成/未完成}\n{一句话描述}\n实际用时：{N} 分钟（计划 {M} 分钟）"
+    "content": "原有 content\n\n── CHECK 结果 ──\n{结果}\n{一句话描述}\n实际用时：{N} 分钟（计划 {M} 分钟）"
 }
 ```
 
 ### 标记完成（REVIEW 完成时）
 
-对所有已完成的时间盒任务调用：
-
 ```python
-# POST /task/{taskId}/complete
+# POST {API_BASE}/task/{taskId}/complete
 # 无需 body，返回 200 即成功
 ```
 
-### 授权脚本位置
+### 授权脚本（ticktick_auth.py）
 
-首次授权脚本存放在：`~/.config/timebox/ticktick_auth.py`
-
-脚本由 PLAN 初始化时自动写入（若不存在），内容如下：
+脚本存放在 `~/.config/timebox/ticktick_auth.py`，支持通过参数切换版本：
 
 ```python
 #!/usr/bin/env python3
-"""TickTick 一次性 OAuth 授权脚本 - 由 timebox skill 自动生成"""
-import http.server, webbrowser, json, urllib.parse, urllib.request, base64, threading
+"""TickTick / 滴答清单 一次性 OAuth 授权脚本 - 由 timebox skill 自动生成"""
+import http.server, webbrowser, json, urllib.parse, urllib.request, base64, threading, sys
 from pathlib import Path
 
-CLIENT_ID     = "{user_client_id}"    # 用户在 developer.ticktick.com 注册的 App
+CLIENT_ID     = "{user_client_id}"
 CLIENT_SECRET = "{user_client_secret}"
 REDIRECT_URI  = "http://localhost:8765/callback"
 TOKEN_FILE    = Path.home() / ".config" / "timebox" / "ticktick.json"
-AUTH_URL      = "https://ticktick.com/oauth/authorize"
-TOKEN_URL     = "https://ticktick.com/oauth/token"
 PORT          = 8765
+
+# 通过命令行参数切换版本：python3 ticktick_auth.py --china
+region = "china" if "--china" in sys.argv else "global"
+if region == "china":
+    AUTH_URL  = "https://dida365.com/oauth/authorize"
+    TOKEN_URL = "https://dida365.com/oauth/token"
+    print("模式：滴答清单中国版（dida365.com）")
+else:
+    AUTH_URL  = "https://ticktick.com/oauth/authorize"
+    TOKEN_URL = "https://ticktick.com/oauth/token"
+    print("模式：TickTick 国际版（ticktick.com）")
+
 received_code = None
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -390,7 +446,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if "code" in params:
             received_code = params["code"][0]
             self.send_response(200); self.send_header("Content-type","text/html;charset=utf-8"); self.end_headers()
-            self.wfile.write(b"<h2 style='font-family:sans-serif;padding:40px'>\xe2\x9c\x85 \xe6\x8e\x88\xe6\x9d\x83\xe6\x88\x90\xe5\x8a\x9f\uff01\xe5\x8f\xaf\xe4\xbb\xa5\xe5\x85\xb3\xe9\x97\xad\xe6\xad\xa4\xe9\xa1\xb5\xe9\x9d\xa2\xe3\x80\x82</h2>")
+            self.wfile.write("<h2 style='font-family:sans-serif;padding:40px'>✅ 授权成功！可以关闭此页面。</h2>".encode())
         else:
             self.send_response(400); self.end_headers()
         threading.Thread(target=self.server.shutdown).start()
@@ -401,7 +457,7 @@ def main():
     server = http.server.HTTPServer(("localhost", PORT), Handler)
     params = urllib.parse.urlencode({"client_id":CLIENT_ID,"response_type":"code","redirect_uri":REDIRECT_URI,"scope":"tasks:write tasks:read"})
     print("正在打开浏览器授权页..."); webbrowser.open(f"{AUTH_URL}?{params}")
-    print("等待授权完成（在浏览器中点击同意）..."); server.serve_forever()
+    print("等待授权完成..."); server.serve_forever()
     if not received_code: print("❌ 未收到授权码"); return
     cred = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
     data = urllib.parse.urlencode({"grant_type":"authorization_code","code":received_code,"redirect_uri":REDIRECT_URI}).encode()
@@ -412,6 +468,16 @@ def main():
     print(f"✅ 授权成功！Token 已保存到：{TOKEN_FILE}")
 
 if __name__ == "__main__": main()
+```
+
+**中国版用户运行方式：**
+```bash
+python3 ~/.config/timebox/ticktick_auth.py --china
+```
+
+**国际版用户运行方式：**
+```bash
+python3 ~/.config/timebox/ticktick_auth.py
 ```
 
 ---
